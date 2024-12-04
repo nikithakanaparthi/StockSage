@@ -7,3 +7,5 @@ seaborn==0.12.2
 scikit-learn==1.2.2
 torch==2.0.1   # If using PyTorch for LSTM or other models
 transformers==4.35.1  # If using a pre-trained model for chatbot
+autots==0.5.3
+plotly==5.15.0

@@ -4,10 +4,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 
-# Set Streamlit page configuration as the first command
+# Set Streamlit page configuration
 st.set_page_config(layout="wide")
 
-# Function to fetch stock data from S&P 500
+
 @st.cache_data
 def get_sp500_data():
     sp500_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'JPM', 'TSLA', 'COST', 'WMT']
@@ -25,17 +25,19 @@ def get_sp500_data():
 
     return all_stock_data
 
-# Load forecast and original data CSV files
+
 @st.cache_data
 def load_data():
-    original_data_df = pd.read_csv('/Users/jenvithmanduva/Downloads/single_stock_original_data (1).csv', parse_dates=['Date'], index_col='Date')
-    forecast_df = pd.read_csv('/Users/jenvithmanduva/Downloads/forecast_results (1).csv', parse_dates=['Date'], index_col='Date')
+    original_data_df = pd.read_csv('single_stock_original_data.csv', parse_dates=['Date'], index_col='Date')
+    forecast_df = pd.read_csv('forecast_results .csv', parse_dates=['Date'], index_col='Date')
     return original_data_df, forecast_df
 
-# Function to plot forecast using Plotly in Streamlit
-def plot_forecast_plotly(forecast_df, original_data_df):
+
+def plot_forecast_plotly(forecast_df, original_data_df, forecast_weeks):
     original_close = original_data_df['Close'].tail(100)
-    forecast_df.index += pd.DateOffset(days=1)  # Adjust the dates for forecast data
+    forecast_df.index += pd.DateOffset(days=1)
+    forecast_weeks = int(forecast_weeks)
+    forecast_df = forecast_df.head(forecast_weeks)
     forecast_close = forecast_df['Close']
 
     fig = go.Figure()
@@ -72,158 +74,265 @@ def plot_forecast_plotly(forecast_df, original_data_df):
 
     st.plotly_chart(fig, use_container_width=True)
 
-# Streamlit app setup
+
+models_info = {
+    "DynamicFactorMQ": """
+    Overview: A statistical model used for multivariate time series forecasting. Handles variables at different frequencies and captures common trends.
+
+    **Advantages:** Mixed frequencies, latent factor modeling, noise reduction.
+    **Disadvantages:** High complexity, slow with large data, struggles with non-linear dynamics.
+    """,
+    "PytorchForecasting": """
+    Overview: A deep learning-based forecasting library built on PyTorch, capturing non-linear relationships and feature extraction.
+
+    **Advantages:** Flexible neural architectures, non-linear relationships, effective feature extraction.
+    **Disadvantages:** Computational cost, overfitting risk, harder interpretability.
+    """,
+    "MultivariateRegression": """
+    Overview: This is a traditional regression model that extends linear regression to multiple variables, using the relationships between multiple time series to predict future values.
+
+    **Advantages:** Simplicity, fast, effective for linear relationships.
+    **Disadvantages:** Limited to linear dependencies, misses complex interactions, overfitting risk.
+    """,
+    "NVAR (Nonlinear Vector Autoregression)": """
+    Overview: NVAR captures non-linear relationships, extending VAR models to complex markets.
+
+    **Advantages:** Non-linear modeling, multi-asset focus, suitable for complex markets.
+    **Disadvantages:** Model complexity, data intensive, overfitting risk in volatile markets.
+    """,
+    "NeuralForecast": """
+    Overview: A neural network model that handles complex and non-linear patterns in time series forecasting.
+
+    **Advantages:** Excellent for non-linear relationships, scalable, handles long-term dependencies.
+    **Disadvantages:** Requires careful tuning, computationally intensive, overfitting risk in noisy data.
+    """,
+    "MAR (Multivariate Adaptive Regression)": """
+    Overview: An adaptive regression technique that captures complex relationships.
+
+    **Advantages:** Flexible to data, interpretable, handles noise well.
+    **Disadvantages:** Limited to moderate complexities, slower for large datasets.
+    """,
+    "RollingRegression": """
+    Overview: A regression model with rolling window adjustments for parameter recalculations.
+
+    **Advantages:** Adapts to changing relationships, simple, responds to market changes.
+    **Disadvantages:** Sensitive to window size, struggles with non-linearities, short-term focus.
+    """,
+    "BallTreeMultivariateMotif": """
+    Overview: Uses BallTree to efficiently search for recurring patterns across multiple time series.
+
+    **Advantages:** Pattern discovery, efficient search for large datasets, multivariate support.
+    **Disadvantages:** Pattern dependency assumptions, not ideal for high volatility.
+    """
+}
+
+variable_info = """
+**Variable Weights: How to Choose Weights for Stock Market Variables**
+
+In stock market predictions, different variables can be weighted based on their relevance to specific forecasting goals.
+
+- **Open Price**: Reflects after-hours trading and overnight news.
+- **Close Price**: Consolidated view of daily trading.
+- **Low Price**: Session's support level, identifying buy signals.
+- **High Price**: Represents resistance levels.
+"""
+
+
 def main():
     st.title("Stock Sage")
-    st.markdown(
-        """
-        <h1 style='text-align: center; font-size: 48px; margin-top: -30px;'>
-        Stock Sage
-        </h1>
-        """, 
-        unsafe_allow_html=True
-    )
-    
+
     tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'JPM', 'TSLA', 'COST', 'WMT']
-    st.markdown("<div style='display: flex; justify-content: center;'>", unsafe_allow_html=True)
-    selected_ticker = st.selectbox("Select a stock to view data:", tickers, key='centered_dropdown')
-    st.markdown("</div>", unsafe_allow_html=True)
+    selected_ticker = st.selectbox("Select a stock to view data:", tickers)
     all_stock_data = get_sp500_data()
-    col1, col2 = st.columns([1, 2])
+    ticker_data = all_stock_data[all_stock_data['Ticker'] == selected_ticker]
 
-    with col1:
-        ticker_data = all_stock_data[all_stock_data['Ticker'] == selected_ticker]
-        
-        # Feature Weights Section
-        st.subheader("Variable Weights: How to Choose Weights for Stock Market Variables")
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Price Chart", "Statistics", "Model Info", "Variable Info", "Metrics Info"])
+
+    with tab1:
+        st.subheader(f"Price Chart for {selected_ticker}")
+        st.line_chart(ticker_data['Close'])
+
+    with tab2:
+        st.subheader(f"Statistics for {selected_ticker}")
+        st.dataframe(ticker_data.describe())
+
+    with tab3:
+        st.subheader("Forecasting Models")
+        for model_name, description in models_info.items():
+            with st.expander(model_name):
+                st.markdown(description)
+
+    with tab4:
+        st.subheader("Variable Information")
+        st.markdown(variable_info)
+
+    with tab5:
+        st.subheader("Metrics Information")
         st.markdown("""
-            In stock market predictions, different variables can be weighted based on their relevance to specific forecasting goals.
-            
-            **Open Price**: Reflects after-hours trading and overnight news, useful for intraday or short-term predictions.  
-            **Close Price**: The most consolidated view of daily trading, often given higher weight in end-of-day predictions.  
-            **Low Price**: Shows the session's support level, higher weight helps identify buy signals or dips.  
-            **High Price**: Represents resistance levels, useful for recognizing overbought conditions.  
-            **Volume**: Critical for trend analysis, volume spikes can indicate impending price changes.
+        ### sMAPE (Symmetric Mean Absolute Percentage Error)
+        Measures the percentage error between forecast and actual values, normalized by their magnitude. 
+        In stock market forecasting, it handles varying stock prices better than raw errors and balances over-prediction and under-prediction. 
+        However, it is less effective for stocks with frequent zero or near-zero prices.
+
+        **Use Case:** Comparing predictions across stocks with widely varying price levels, such as a mix of blue-chip stocks and smaller firms.
+
+        ### MAE (Mean Absolute Error)
+        Measures the average magnitude of absolute errors and does not penalize large errors as heavily as RMSE. 
+        Suitable for analyzing the typical forecast error and doesn't emphasize extreme mispredictions.
+
+        **Use Case:** Predicting relatively stable stocks or when extreme outliers aren't a primary concern.
+
+        ### RMSE (Root Mean Squared Error)
+        Measures the square root of the average squared errors, penalizing larger errors more heavily than MAE. 
+        Highlights extreme forecast misses and focuses on accuracy for high-magnitude movements.
+
+        **Use Case:** Ideal for volatile stocks where sharp movements significantly impact model performance.
+
+        ### SPL (Scaled Pinball Loss)
+        Quantile-based loss for upper/lower bound predictions. Penalizes forecasts outside confidence intervals and is important for probabilistic forecasts like VaR.
+
+        **Use Case:** Creating robust predictions with upper/lower bounds, especially in options trading or hedging strategies.
+
+        ### Containment
+        Measures how often actual prices fall within the predicted confidence intervals. 
+        Offers feedback on the reliability of the model's uncertainty estimation and penalizes overly narrow predictions.
+
+        **Use Case:** Evaluating model reliability for regulatory reporting or human-readable evaluations.
+
+        ### MADE (Mean Absolute Differential Error)
+        Measures the magnitude of changes in forecasted vs. actual time series. 
+        Focuses on capturing price movements rather than price levels and encourages replicating the stock’s trendiness.
+
+        **Use Case:** Optimizing predictions for momentum-based strategies or swing trading.
+
+        ### MAGE (Mean Absolute aGgregate Error)
+        Measures aggregate forecast errors over grouped data. 
+        Valuable for portfolios or indices to avoid systematic over/under-prediction.
+
+        **Use Case:** Best for fund managers tracking portfolio performance or index-level predictions.
+
+        ### MLE and iMLE
+        MLE penalizes under-predictions, while iMLE penalizes over-predictions. 
+        Helps control systematic bias, making them suitable for conservative or bullish forecasting scenarios.
+
+        **Use Case:** Applications like pricing derivatives where under/overestimation risks differ.
+
+        ### Contour
+        Evaluates how well the forecast matches the directional movements of the actual data. 
+        Ensures the forecast aligns with market trends, even if the magnitude isn't perfectly accurate.
+
+        **Use Case:** High-level forecasts or when visual alignment with actual prices is important.
         """)
-        
-        if 'weights' not in st.session_state:
-            st.session_state.weights = {
-                'Open Price': 2,
-                'Close Price': 2,
-                'Low Price': 2,
-                'High Price': 2
-            }
 
-        total_weight = 0
-        new_weights = {}
-        
-        for feature, default_weight in st.session_state.weights.items():
-            weight = st.number_input(
-                feature,
-                min_value=0,
-                max_value=10,
-                value=default_weight,
-                step=1,
-                key=f"weight_{feature}"
-            )
-            new_weights[feature] = weight
-            total_weight += weight
-        
-        st.write(f"Total Weight: {total_weight}/10")
-        if total_weight != 10:
-            st.error("Total weight must equal 10.")
-        else:
-            st.success("Weights properly allocated!")
-            st.session_state.weights = new_weights
+    st.divider()  # Separator for inputs below tabs
 
+    # Forecasting Inputs
+    st.subheader("Forecast Settings")
+
+    # Multiselect for model selection
+    selected_models = st.multiselect(
+        "Select up to 4 forecasting models:",
+        list(models_info.keys()),
+        max_selections=4
+    )
+
+    # Manual weight inputs for variables (Open, Close, High, Low)
+    st.subheader("Assign Weights to Variables (Sum ≤ 10)")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        open_weight = st.number_input("Open Weight:", min_value=0.0, max_value=10.0, value=2.0, step=0.1, key="open")
     with col2:
-        st.subheader(f"Stock data for {selected_ticker}")
-        
-        tab1, tab2 = st.tabs(["Price Chart", "Statistics"])
-        
-        with tab1:
-            st.line_chart(ticker_data['Close'])
-        
-        with tab2:
-            st.dataframe(ticker_data.describe())
-        
-        forecast_weeks = st.selectbox("Select how many weeks to forecast for:", list(range(1, 53)), index=3)
+        close_weight = st.number_input("Close Weight:", min_value=0.0, max_value=10.0, value=2.0, step=0.1, key="close")
+    with col3:
+        high_weight = st.number_input("High Weight:", min_value=0.0, max_value=10.0, value=2.0, step=0.1, key="high")
+    with col4:
+        low_weight = st.number_input("Low Weight:", min_value=0.0, max_value=10.0, value=2.0, step=0.1, key="low")
 
-        st.subheader(f"Forecasting {forecast_weeks} weeks ahead for {selected_ticker}")
-        st.markdown("""
-            As we predict for further weeks ahead, the accuracy may go down""")
-            
-        if st.button("Generate Forecast"):
-            original_data_df, forecast_df = load_data()
-            plot_forecast_plotly(forecast_df, original_data_df)
+    total_variable_weight = open_weight + close_weight + high_weight + low_weight
 
-    # Model descriptions
-    st.divider()
-    st.subheader("Forecasting Models")
+    if total_variable_weight > 10:
+        st.error("The sum of variable weights must not exceed 10. Please adjust the values.")
+    else:
+        # Metric weight inputs in three rows (3 metrics per row)
+        st.subheader("Assign Weights to Metrics (Sum ≤ 10)")
 
-    models_info = {
-        "DynamicFactorMQ": """
-        Overview: A statistical model used for multivariate time series forecasting. Handles variables at different frequencies and captures common trends.
+        col5, col6, col7 = st.columns(3)
+        with col5:
+            smape_weight = st.number_input("sMAPE Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1,
+                                           key="smape")
+        with col6:
+            mae_weight = st.number_input("MAE Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1, key="mae")
+        with col7:
+            rmse_weight = st.number_input("RMSE Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1,
+                                          key="rmse")
 
-        **Advantages:** Mixed frequencies, latent factor modeling, noise reduction.
-        **Disadvantages:** High complexity, slow with large data, struggles with non-linear dynamics.
-        """,
-        "PytorchForecasting": """
-        Overview: A deep learning-based forecasting library built on PyTorch, capturing non-linear relationships and feature extraction.
+        col8, col9, col10 = st.columns(3)
+        with col8:
+            spl_weight = st.number_input("SPL Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1, key="spl")
+        with col9:
+            containment_weight = st.number_input("Containment Weight:", min_value=0.0, max_value=10.0, value=0.0,
+                                                 step=0.1, key="containment")
+        with col10:
+            made_weight = st.number_input("MADE Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1,
+                                          key="made")
 
-        **Advantages:** Flexible neural architectures, non-linear relationships, effective feature extraction.
-        **Disadvantages:** Computational cost, overfitting risk, harder interpretability.
-        """,
-        "MultivariateRegression": """
-        Overview: This is a traditional regression model that extends linear regression to multiple variables, using the relationships between multiple time series to predict future values.
-        
-        **Advantages:** Simplicity, fast, effective for linear relationships.
-        **Disadvantages:** Limited to linear dependencies, misses complex interactions, overfitting risk.
-        """,
-        "NVAR (Nonlinear Vector Autoregression)": """
-        Overview: NVAR captures non-linear relationships, extending VAR models to complex markets.
-        
-        **Advantages:** Non-linear modeling, multi-asset focus, suitable for complex markets.
-        **Disadvantages:** Model complexity, data intensive, overfitting risk in volatile markets.
-        """,
-        "NeuralForecast": """
-        Overview: A neural network model that handles complex and non-linear patterns in time series forecasting.
+        col11, col12, col13 = st.columns(3)
+        with col11:
+            mage_weight = st.number_input("MAGE Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1,
+                                          key="mage")
+        with col12:
+            mle_weight = st.number_input("MLE Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1, key="mle")
+        with col13:
+            contour_weight = st.number_input("Contour Weight:", min_value=0.0, max_value=10.0, value=0.0, step=0.1,
+                                             key="contour")
 
-        **Advantages:** Excellent for non-linear relationships, scalable, handles long-term dependencies.
-        **Disadvantages:** Requires careful tuning, computationally intensive, overfitting risk in noisy data.
-        """,
-        "MAR (Multivariate Adaptive Regression)": """
-        Overview: An adaptive regression technique that captures complex relationships.
+        # Calculate the total weight for metrics
+        total_metric_weight = (smape_weight + mae_weight + rmse_weight + spl_weight + containment_weight +
+                               made_weight + mage_weight + mle_weight + contour_weight)
 
-        **Advantages:** Flexible to data, interpretable, handles noise well.
-        **Disadvantages:** Limited to moderate complexities, slower for large datasets.
-        """,
-        "RollingRegression": """
-        Overview: A regression model with rolling window adjustments for parameter recalculations.
-
-        **Advantages:** Adapts to changing relationships, simple, responds to market changes.
-        **Disadvantages:** Sensitive to window size, struggles with non-linearities, short-term focus.
-        """,
-        "BallTreeMultivariateMotif": """
-        Overview: Uses BallTree to efficiently search for recurring patterns across multiple time series.
-        
-        **Advantages:** Pattern discovery, efficient search for large datasets, multivariate support.
-        **Disadvantages:** Pattern dependency assumptions, not ideal for high volatility.
-        """
-    }
-
-    model_col1, model_col2 = st.columns(2)
-
-    # Split the models across the two columns
-    for idx, (model_name, description) in enumerate(models_info.items()):
-        if idx % 2 == 0:
-            with model_col1:
-                with st.expander(model_name):
-                    st.markdown(description)
+        if total_metric_weight > 10:
+            st.error("The sum of metric weights must not exceed 10. Please adjust the values.")
         else:
-            with model_col2:
-                with st.expander(model_name):
-                    st.markdown(description)
+            forecast_weeks = st.number_input("Number of Weeks to Forecast:", min_value=1, max_value=52, value=4)
+
+            if st.button("Generate Forecast"):
+                st.write(f"Generating forecast using models: {', '.join(selected_models)}...")
+                st.write(
+                    f"Variable weights: Open={open_weight}, Close={close_weight}, High={high_weight}, Low={low_weight}")
+                st.write(
+                    f"Metric weights: sMAPE={smape_weight}, MAE={mae_weight}, RMSE={rmse_weight}, SPL={spl_weight}, Containment={containment_weight}, MADE={made_weight}, MAGE={mage_weight}, MLE={mle_weight}, Contour={contour_weight}")
+                # Add your forecasting logic here
+                original_data_df, forecast_df = load_data()
+                plot_forecast_plotly(forecast_df, original_data_df, forecast_weeks)
+
+    st.divider()
+    st.subheader("Chatbot")
+
+    # Initialize session state for chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display the chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat input box
+    user_input = st.text_input("Type your question here...", key="chat_input")
+    if user_input:
+        # Save user's message
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        # Generate chatbot response (dummy example)
+        response = f"You said: {user_input}"
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        with st.chat_message("assistant"):
+            st.markdown(response)
+
+        # Clear input box
+        st.session_state.chat_input = ""
 
 if __name__ == "__main__":
     main()
